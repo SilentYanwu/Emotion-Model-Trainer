@@ -1,0 +1,57 @@
+针对emotion_data_manual.csv
+32训练批次：
+    training_args = TrainingArguments(
+        output_dir=output_dir_base,        # 输出目录
+        num_train_epochs=8,               # 根据需要调整 epoch
+        per_device_train_batch_size=32,    # 根据显存调整 batch size : 16 32 12 8 等等，我个人实践下来，12/16差不多最佳，但是速度偏慢。
+        # Yanwu实践：可以提高批次（16到32）来提高运行速度，但同时建议提高学习率(2e-5到4e-5），正则化（从0.01到0.1）和预热比例（从0.1到0.3）。
+        per_device_eval_batch_size=32,
+        learning_rate=4e-5,               # 适合 fine-tuning 的学习率
+        weight_decay=0.1,                 # L2 正则化
+        warmup_ratio=0.3,                  # 预热比例
+        eval_strategy="epoch",
+        # save_strategy="epoch",
+        # load_best_model_at_end=True,
+        save_strategy="no",
+        load_best_model_at_end=False,
+        metric_for_best_model="f1_weighted", # 按加权 F1 选择最佳模型
+        greater_is_better=True,
+        logging_dir=f'{output_dir_base}/logs', # 指定日志目录
+        logging_steps=50,
+        seed=SEED,
+        fp16=torch.cuda.is_available(),    # 如果可用，自动启用混合精度
+        report_to="none"                   # 禁用 wandb 等外部报告
+    )
+
+    accuracy                         0.8036       331
+   macro avg     0.8023    0.7941    0.7930       331
+weighted avg     0.8041    0.8036    0.7996       331
+
+16训练批次：
+    output_dir_base = "./results_18emo"
+    training_args = TrainingArguments(
+        output_dir=output_dir_base,        # 输出目录
+        num_train_epochs=10,               # 根据需要调整 epoch
+        per_device_train_batch_size=16,    # 根据显存调整 batch size : 16 32 12 8 等等，我个人实践下来，12/16差不多最佳，但是速度偏慢。
+        # Yanwu实践：可以提高批次（16到32）来提高运行速度，但同时建议提高学习率(2e-5到4e-5），正则化（从0.01到0.1）和预热比例（从0.1到0.3）。
+        per_device_eval_batch_size=32,
+        learning_rate=2e-5,               # 适合 fine-tuning 的学习率
+        weight_decay=0.01,                 # L2 正则化
+        warmup_ratio=0.1,                  # 预热比例
+        eval_strategy="epoch",
+        # save_strategy="epoch",
+        # load_best_model_at_end=True,
+        save_strategy="no",
+        load_best_model_at_end=False,
+        metric_for_best_model="f1_weighted", # 按加权 F1 选择最佳模型
+        greater_is_better=True,
+        logging_dir=f'{output_dir_base}/logs', # 指定日志目录
+        logging_steps=50,
+        seed=SEED,
+        fp16=torch.cuda.is_available(),    # 如果可用，自动启用混合精度
+        report_to="none"                   # 禁用 wandb 等外部报告
+    )
+accuracy                         0.8218       331
+macro avg     0.8199    0.8165    0.8137       331
+weighted avg     0.8221    0.8218    0.8183       331
+

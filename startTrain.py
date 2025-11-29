@@ -1,4 +1,3 @@
-# emotion_classifier_18emo.py # <-- 文件名建议也更新
 import torch
 import pandas as pd
 import numpy as np
@@ -9,10 +8,22 @@ from transformers import (
     BertTokenizer,
     BertForSequenceClassification,
     Trainer,
-    TrainingArguments
+    TrainingArguments,
+    EarlyStoppingCallback
 )
 import os
+import shutil
 import json
+
+from cleancache import clear_folder
+# 设置设备
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"使用设备: {device}")
+
+# 设置模型和文件路径
+MODEL_PATH = "bert-base-chinese"
+DATA_PATH = "emotion_data_manual.csv"
+CACHE_PATH = "results_18emo"
 
 # 固定随机种子保证可复现
 SEED = 42
@@ -26,7 +37,7 @@ TARGET_EMOTIONS = ["高兴", "厌恶", "害羞", "害怕",
                    "惊讶", "哭泣", "心动", "难为情", "自信", "调皮"]
 NUM_LABELS = len(TARGET_EMOTIONS) # 获取标签数量
 
-def load_data(data_path="emotion_data_manual.csv"):
+def load_data(data_path=DATA_PATH):
     """加载并预处理数据，强制使用定义的情绪标签"""
     # 加载数据并筛选目标情绪
     try:
@@ -87,7 +98,6 @@ def load_data(data_path="emotion_data_manual.csv"):
             random_state=SEED
         )
 
-
     # 编码标签
     train_labels_encoded = label_encoder.transform(train_labels)
     test_labels_encoded = label_encoder.transform(test_labels)
@@ -121,11 +131,12 @@ class EmotionDataset(torch.utils.data.Dataset):
 
 def train_and_evaluate():
     """训练和评估18类情绪分类模型""" # <-- 更新注释
+
     # 1. 加载数据
     train_texts, test_texts, train_labels, test_labels, label_encoder = load_data()
 
     # 2. 初始化模型和分词器
-    model_name = "bert-base-chinese"
+    model_name = MODEL_PATH
     tokenizer = BertTokenizer.from_pretrained(model_name, use_fast=False)
     model = BertForSequenceClassification.from_pretrained(
         model_name,
@@ -161,16 +172,20 @@ def train_and_evaluate():
     output_dir_base = "./results_18emo"
     training_args = TrainingArguments(
         output_dir=output_dir_base,        # 输出目录
-        num_train_epochs=8,                # 根据需要调整 epoch
-        per_device_train_batch_size=16,    # 根据显存调整 batch size
+        num_train_epochs=10,               # 根据需要调整 epoch
+        per_device_train_batch_size=16,    # 根据显存调整 batch size : 16 32 12 8 等等，我个人实践下来，12/16差不多最佳，但是速度偏慢。
+        # 实践经验：可以提高批次（16到32）来提高运行速度，但同时建议提高学习率(2e-5到4e-5），正则化（从0.01到0.1）和预热比例（从0.1到0.3）。
         per_device_eval_batch_size=32,
         learning_rate=2e-5,               # 适合 fine-tuning 的学习率
         weight_decay=0.01,                 # L2 正则化
         warmup_ratio=0.1,                  # 预热比例
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
+        # save_strategy="no",
+        # load_best_model_at_end=False,
         metric_for_best_model="f1_weighted", # 按加权 F1 选择最佳模型
+        greater_is_better=True,
         logging_dir=f'{output_dir_base}/logs', # 指定日志目录
         logging_steps=50,
         seed=SEED,
@@ -204,7 +219,8 @@ def train_and_evaluate():
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
         compute_metrics=compute_metrics,
-        tokenizer=tokenizer # 传递 tokenizer 方便 Trainer 处理 padding
+        tokenizer=tokenizer, # 传递 tokenizer 方便 Trainer 处理 padding
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=4)]    # 早停下
     )
 
     print("\n开始训练...")
@@ -247,6 +263,13 @@ def train_and_evaluate():
 
     print(f"\n模型和配置已保存到 {final_model_dir}")
 
-# *** FIX: Corrected if __name__ == "__main__": ***
 if __name__ == "__main__":
     train_and_evaluate()
+    print("是否清空缓存？(y/n)")
+    if input().lower() == "y":
+        clear_folder(CACHE_PATH)
+        print("缓存已清空")
+    else:
+        print("缓存未清空，保存在:"+CACHE_PATH)
+    print("训练完成！")
+
